@@ -12,6 +12,7 @@ app.get('/', (req, res) => {
 })
 
 let cards = null;
+let piles = null;
 
 (async function getCards () {
   try {
@@ -26,11 +27,21 @@ let cards = null;
         console.error(e)
       }
     }
+     piles = cards?.reduce((accum, item) => {
+      const lastPile = accum[accum.length - 1]
+      if (lastPile && lastPile.length < 6) {
+        lastPile.push(item)
+      } else accum.push([item])
+      return accum
+    }, [])
   } catch (error) {
     console.error(error)
   }
 })()
 
+
+
+let clients = io.sockets.sockets
 io.on('connection', socket => {
   console.log(`user connected, ${socket.id}`)
 
@@ -46,7 +57,11 @@ io.on('connection', socket => {
     }
   })
 
-  socket.emit('cards', cards)
+  socket.on('cards', () => {
+    Array.from(clients.keys()).forEach((key, index) => {
+      socket.to(key).emit('piles', piles[index])
+    })
+  })
 })
 
 http.listen(8000, () => {
