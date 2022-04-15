@@ -1,11 +1,13 @@
 const app = require('express')()
 const http = require('http').createServer(app)
 const axios = require('axios')
+const { instrument } = require('@socket.io/admin-ui')
 const io = require('socket.io')(http, {
   cors: {
-    origins: ['http://localhost:3000']
+    origins: ['http://localhost:3000', 'https://admin.socket.io/']
   }
 })
+
 
 app.get('/', (req, res) => {
   res.send('Deberts game')
@@ -27,7 +29,8 @@ let piles = null;
         console.error(e)
       }
     }
-     piles = cards?.reduce((accum, item) => {
+
+    piles = cards?.reduce((accum, item) => {
       const lastPile = accum[accum.length - 1]
       if (lastPile && lastPile.length < 6) {
         lastPile.push(item)
@@ -39,30 +42,54 @@ let piles = null;
   }
 })()
 
+io.on('connection',
+  async socket => {
+    console.log(`user connected, ${socket.id}`)
 
+    socket.emit('id', socket.id)
 
-let clients = io.sockets.sockets
-io.on('connection', socket => {
-  console.log(`user connected, ${socket.id}`)
+    const users = Array.from(await io.allSockets())
+    if (users.length === 4) {
+      const sendCards = async function () {
 
-  socket.on('disconnect', () => {
-    console.log(`user disconnected, ${socket.id}`)
-  })
+        const map = new Map()
 
-  socket.on('message', (msg, id) => {
-    if (id === '') {
-      socket.broadcast.emit('broadcast', msg)
-    } else {
-      socket.to(id).emit('broadcast', msg)
+        return piles?.reduce((accum, item, index) => {
+          if (users.length !== index) {
+            map.set(users[index], item)
+          } else if (index === users.length) {
+            map.set('other', item)
+          }
+          return map
+        }, {})
+      }()
+
+      socket.emit('piles', Array.from(await sendCards));
     }
-  })
 
-  socket.on('cards', () => {
-    Array.from(clients.keys()).forEach((key, index) => {
-      socket.to(key).emit('piles', piles[index])
+    socket.on('disconnect', () => {
+      console.log(`user disconnected, ${socket.id}`)
+    })
+    socket.on('message', (msg, id) => {
+      if (id === '') {
+        socket.emit('broadcast', msg)
+      } else {
+        socket.to(id).emit('broadcast', msg)
+      }
+    })
+
+
+
+
+    socket.on('join', roomId => {
+      socket.join(roomId)
+      console.log(roomId)
+
     })
   })
-})
+
+
+instrument(io, { auth: false })
 
 http.listen(8000, () => {
   console.log('listening-http on lh:8000')
