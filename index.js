@@ -1,6 +1,10 @@
 const app = require('express')()
 const http = require('http').createServer(app)
 const axios = require('axios')
+
+const mongoose = require('mongoose');
+const DB_URL = `mongodb+srv://rsh:qaz135@cluster0.ozgo9.mongodb.net/?retryWrites=true&w=majority`
+
 const { instrument } = require('@socket.io/admin-ui')
 const io = require('socket.io')(http, {
   cors: {
@@ -50,7 +54,7 @@ io.on('connection',
 
     const users = Array.from(await io.allSockets())
     if (users.length === 4) {
-      const sendCards = async function () {
+      const sendCards = function () {
 
         const map = new Map()
 
@@ -63,19 +67,15 @@ io.on('connection',
           return map
         }, {})
       }()
+    if (sendCards) socket.emit('piles', Array.from(sendCards));
 
-      socket.emit('piles', Array.from(await sendCards));
     }
 
     socket.on('disconnect', () => {
       console.log(`user disconnected, ${socket.id}`)
     })
-    socket.on('message', (msg, id) => {
-      if (id === '') {
-        socket.emit('broadcast', msg)
-      } else {
-        socket.to(id).emit('broadcast', msg)
-      }
+    socket.on('cards', (cards) => {
+      socket.emit('broadcast', cards)
     })
 
 
@@ -91,6 +91,16 @@ io.on('connection',
 
 instrument(io, { auth: false })
 
-http.listen(8000, () => {
-  console.log('listening-http on lh:8000')
-})
+async function startApp() {
+  try {
+    await mongoose.connect(DB_URL, { useUnifiedTopology: true, useNewUrlParser: true })
+    http.listen(8000, () => {
+      console.log('listening-http on lh:8000')
+    })
+  } catch (e) {
+    console.log(e)
+  }
+}
+
+startApp()
+
